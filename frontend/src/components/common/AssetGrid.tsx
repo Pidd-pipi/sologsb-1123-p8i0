@@ -70,13 +70,16 @@ export default function AssetGrid({
                 <img
                   src={thumbs[asset.id]}
                   alt={asset.imageNo}
-                  style={{ width: '100%', display: 'block', borderRadius: 4, background: '#eef2f6' }}
+                  style={{ width: '100%', display: 'block', borderRadius: 4, background: '#eef2f6', opacity: asset.stale ? 0.7 : 1 }}
                 />
                 <div style={{ position: 'absolute', top: 4, left: 4 }}>
                   <Checkbox checked={selected} onChange={() => onToggle(asset.id)} />
                 </div>
                 <div style={{ position: 'absolute', top: 4, right: 4 }}>
-                  <Tag color={QUALITY_COLOR[asset.quality]}>{asset.quality}</Tag>
+                  <Space size={4}>
+                    {asset.stale ? <Tag color="red">待重算</Tag> : null}
+                    <Tag color={QUALITY_COLOR[asset.quality]}>{asset.quality}</Tag>
+                  </Space>
                 </div>
               </div>
               <Typography.Text strong style={{ display: 'block', marginTop: 6 }}>
@@ -84,6 +87,7 @@ export default function AssetGrid({
               </Typography.Text>
               <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
                 GSD {asset.gsd} cm/px · 重叠 {asset.overlap}% · 倾角 {asset.tiltAngle}°
+                {asset.stale ? <Tag color="red" style={{ marginLeft: 6 }}>已失效</Tag> : null}
               </Typography.Text>
               <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
                 航高 {asset.altitude} m · {new Date(asset.shotAt).toLocaleString('zh-CN')}

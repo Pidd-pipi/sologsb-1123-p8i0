@@ -21,6 +21,7 @@ import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useMissionStore } from '../stores/missionStore';
 import { useWaypointStore } from '../stores/waypointStore';
 import { useAssetStore } from '../stores/assetStore';
+import { useCollabStore } from '../stores/collabStore';
 import { useMissionFilter } from '../hooks/useMissionFilter';
 import MissionCard from '../components/common/MissionCard';
 import { MISSION_PURPOSES, MISSION_STATUSES, type LngLat, type MissionDraft, type MissionPurpose, type MissionStatus } from '../types/mission';
@@ -51,13 +52,16 @@ export default function MissionList() {
   const navigate = useNavigate();
   const missions = useMissionStore((s) => s.items);
   const addMission = useMissionStore((s) => s.add);
+  const archiveMission = useMissionStore((s) => s.archiveMission);
   const waypoints = useWaypointStore((s) => s.items);
   const assets = useAssetStore((s) => s.items);
+  const openConflictModal = useCollabStore((s) => s.openConflictModal);
   const { filters, patch, reset, result, options } = useMissionFilter();
 
   const [open, setOpen] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
+  const [blockerModal, setBlockerModal] = useState<{ missionId: string; missionNo: string; blockers: string[] } | null>(null);
   const [polygonText, setPolygonText] = useState(polygonToText(DEFAULT_POLYGON));
   const [draft, setDraft] = useState<Omit<MissionDraft, 'areaPolygon'>>({
     missionNo: '',
@@ -115,6 +119,15 @@ export default function MissionList() {
     setError('');
     setToast(`已建立任务「${created.missionNo}」，测区 ${polygon.length} 个边界点`);
     setDraft({ ...draft, missionNo: '', name: '', areaName: '' });
+  };
+
+  const onArchive = async (missionId: string, missionNo: string) => {
+    const res = await archiveMission(missionId);
+    if (res.ok) {
+      setToast(`任务「${missionNo}」已归档`);
+    } else {
+      setBlockerModal({ missionId, missionNo, blockers: res.blockers });
+    }
   };
 
   return (
@@ -239,6 +252,13 @@ export default function MissionList() {
                     <Button size="small" type="link" onClick={() => navigate('/settings/camera')}>
                       相机预设
                     </Button>
+                    {row.mission.status === '已归档' ? (
+                      <Tag color="purple">已归档</Tag>
+                    ) : (
+                      <Button size="small" type="link" onClick={() => onArchive(row.mission.id, row.mission.missionNo)}>
+                        归档
+                      </Button>
+                    )}
                   </Space>
                 }
               />
@@ -336,6 +356,35 @@ export default function MissionList() {
             <Input.TextArea rows={5} value={polygonText} onChange={(e) => setPolygonText(e.target.value)} />
           </div>
         </Space>
+      </Modal>
+
+      <Modal
+        open={!!blockerModal}
+        title="归档前请先结清差异"
+        onCancel={() => setBlockerModal(null)}
+        footer={
+          <Space>
+            <Button onClick={() => setBlockerModal(null)}>稍后处理</Button>
+            <Button
+              type="primary"
+              onClick={() => {
+                if (blockerModal) openConflictModal(blockerModal.missionId);
+                setBlockerModal(null);
+              }}
+            >
+              去合并差异 / 重算
+            </Button>
+          </Space>
+        }
+      >
+        <Alert
+          type="warning"
+          showIcon
+          message={`任务「${blockerModal?.missionNo ?? ''}」还不能归档，差异清完才能归档：`}
+        />
+        <ul style={{ marginTop: 12, paddingLeft: 20 }}>
+          {blockerModal?.blockers.map((b, i) => <li key={i}>{b}</li>)}
+        </ul>
       </Modal>
     </Space>
   );

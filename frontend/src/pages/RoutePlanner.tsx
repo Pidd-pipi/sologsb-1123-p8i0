@@ -3,10 +3,12 @@ import { Link, useParams } from 'react-router-dom';
 import { Alert, Button, Card, Col, Row, Space, Table, Tag, Typography, type TableProps } from 'antd';
 import { useMissionStore } from '../stores/missionStore';
 import { useWaypointStore } from '../stores/waypointStore';
+import { useLineStore } from '../stores/lineStore';
 import { useRouteMetrics, DEFAULT_ROUTE_PARAMS, type RouteParams } from '../hooks/useRouteMetrics';
 import AmapRouteView from '../components/common/AmapRouteView';
 import OverlapCalcPanel from '../components/common/OverlapCalcPanel';
-import { loadFlightLine, saveFlightLine, splitSorties } from '../utils/db';
+import MissionCollabBanner from '../components/collab/MissionCollabBanner';
+import { splitSorties } from '../utils/db';
 import { newId } from '../utils/id';
 import type { FlightLine } from '../types/flightline';
 import type { Waypoint } from '../types/waypoint';
@@ -24,10 +26,16 @@ export default function RoutePlanner() {
   const missions = useMissionStore((s) => s.items);
   const waypoints = useWaypointStore((s) => s.items);
   const addWaypoint = useWaypointStore((s) => s.add);
+  const lineItems = useLineStore((s) => s.items);
+  const saveLine = useLineStore((s) => s.save);
   const mission = missions.find((m) => m.id === id);
   const missionWaypoints = useMemo(
     () => waypoints.filter((w) => w.missionId === id).sort((a, b) => a.seq - b.seq),
     [waypoints, id],
+  );
+  const savedLine = useMemo(
+    () => lineItems.filter((l) => l.missionId === id).sort((a, b) => a.lineNo - b.lineNo)[0],
+    [lineItems, id],
   );
 
   const [params, setParams] = useState<RouteParams>({ ...DEFAULT_ROUTE_PARAMS });
@@ -35,20 +43,17 @@ export default function RoutePlanner() {
   const [error, setError] = useState('');
   const metrics = useRouteMetrics(id, params);
 
+  // 从合并后的航线参数初始化（切回标签页也会读到同一版本）
   useEffect(() => {
-    if (!id) return;
-    void loadFlightLine(id).then((line) => {
-      if (!line) return;
-      setParams((prev) => ({
-        ...prev,
-        altitude: missionWaypoints[0]?.altitude ?? prev.altitude,
-        overlapForward: line.overlapForward,
-        overlapSide: line.overlapSide,
-        heading: line.heading,
-      }));
-      setSavedText(`上次保存：${new Date(line.updatedAt).toLocaleString('zh-CN')}`);
-    });
-  }, [id, missionWaypoints.length]);
+    if (!savedLine) return;
+    setParams((prev) => ({
+      ...prev,
+      overlapForward: savedLine.overlapForward,
+      overlapSide: savedLine.overlapSide,
+      heading: savedLine.heading,
+    }));
+    setSavedText(`上次保存：${new Date(savedLine.updatedAt).toLocaleString('zh-CN')}`);
+  }, [savedLine?.id, savedLine?.updatedAt]);
 
   useEffect(() => {
     if (missionWaypoints.length > 0) {
@@ -59,7 +64,7 @@ export default function RoutePlanner() {
   const onSave = async () => {
     if (!mission) return;
     const line: FlightLine = {
-      id: newId('line'),
+      id: savedLine?.id ?? newId('line'),
       missionId: mission.id,
       lineNo: 1,
       spacing: metrics.spacing,
@@ -73,7 +78,7 @@ export default function RoutePlanner() {
       heading: params.heading,
       updatedAt: Date.now(),
     };
-    await saveFlightLine(line);
+    await saveLine(line);
     setSavedText(`已保存 ${new Date(line.updatedAt).toLocaleString('zh-CN')}`);
   };
 
@@ -145,6 +150,8 @@ export default function RoutePlanner() {
       </Space>
 
       {error ? <Alert type="error" showIcon message={error} closable onClose={() => setError('')} /> : null}
+
+      <MissionCollabBanner missionId={id} />
 
       <Row gutter={14}>
         <Col span={15}>

@@ -19,6 +19,7 @@ import { useWaypointStore } from '../stores/waypointStore';
 import { useAssetStore } from '../stores/assetStore';
 import AssetGrid from '../components/common/AssetGrid';
 import AmapRouteView from '../components/common/AmapRouteView';
+import MissionCollabBanner from '../components/collab/MissionCollabBanner';
 import { IMAGE_QUALITIES, type ImageAsset, type ImageAssetDraft, type ImageQuality } from '../types/imageasset';
 import { calcGsd, distanceMeters } from '../utils/geoCalc';
 
@@ -155,6 +156,8 @@ export default function AssetCatalog() {
 
       {toast ? <Alert type="success" showIcon message={toast} closable onClose={() => setToast('')} /> : null}
       {error ? <Alert type="error" showIcon message={error} closable onClose={() => setError('')} /> : null}
+
+      <MissionCollabBanner missionId={id} />
 
       <Row gutter={12}>
         {stats.map((s) => (

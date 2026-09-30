@@ -5,8 +5,13 @@ import { RocketOutlined } from '@ant-design/icons';
 import { useMissionStore } from '../stores/missionStore';
 import { useWaypointStore } from '../stores/waypointStore';
 import { useAssetStore } from '../stores/assetStore';
+import { useLineStore } from '../stores/lineStore';
 import { ensureSeedData, markDbVersion, readDbVersion } from '../utils/db';
 import { hasAmapKey } from '../utils/amapLoader';
+import { useCollabSummary } from '../utils/collab';
+import { useCollabStore } from '../stores/collabStore';
+import SyncBridge from '../components/collab/SyncBridge';
+import MergeConflictModal from '../components/collab/MergeConflictModal';
 import MissionList from '../pages/MissionList';
 import RoutePlanner from '../pages/RoutePlanner';
 import WaypointTable from '../pages/WaypointTable';
@@ -14,6 +19,27 @@ import AssetCatalog from '../pages/AssetCatalog';
 import CameraPreset from '../pages/CameraPreset';
 
 const { Header, Content } = Layout;
+
+/** 头部协作徽标：汇总未解决合并差异与待重算成果，点击打开合并弹窗 */
+function CollabBadge() {
+  const { totalConflicts, totalStale } = useCollabSummary();
+  const openConflictModal = useCollabStore((s) => s.openConflictModal);
+  const total = totalConflicts + totalStale;
+  if (total === 0) {
+    return (
+      <Tag color="green" style={{ cursor: 'default' }}>
+        多标签已同步
+      </Tag>
+    );
+  }
+  return (
+    <Tag color="red" style={{ cursor: 'pointer' }} onClick={() => openConflictModal()}>
+      {totalConflicts > 0 ? `${totalConflicts} 处差异待合并` : null}
+      {totalConflicts > 0 && totalStale > 0 ? ' · ' : null}
+      {totalStale > 0 ? `${totalStale} 张成果待重算` : null}
+    </Tag>
+  );
+}
 
 function Shell() {
   const location = useLocation();
@@ -60,6 +86,7 @@ function Shell() {
           style={{ flex: 1, minWidth: 0, background: 'transparent' }}
         />
         <Space size={8}>
+          <CollabBadge />
           <Tag color={hasAmapKey() ? 'green' : 'gold'}>
             {hasAmapKey() ? '高德 JS API' : '本地 SVG 网格视图'}
           </Tag>
@@ -67,6 +94,8 @@ function Shell() {
         </Space>
       </Header>
       <Content className="app-content">
+        <SyncBridge />
+        <MergeConflictModal />
         <Routes>
           <Route path="/" element={<Navigate to="/missions" replace />} />
           <Route path="/missions" element={<MissionList />} />
@@ -87,19 +116,20 @@ export default function AppRouter() {
   const loadMissions = useMissionStore((s) => s.load);
   const loadWaypoints = useWaypointStore((s) => s.load);
   const loadAssets = useAssetStore((s) => s.load);
+  const loadLines = useLineStore((s) => s.load);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       await ensureSeedData();
       markDbVersion();
-      await Promise.all([loadMissions(), loadWaypoints(), loadAssets()]);
+      await Promise.all([loadMissions(), loadWaypoints(), loadAssets(), loadLines()]);
       if (alive) setReady(true);
     })();
     return () => {
       alive = false;
     };
-  }, [loadMissions, loadWaypoints, loadAssets]);
+  }, [loadMissions, loadWaypoints, loadAssets, loadLines]);
 
   if (!ready) {
     return (

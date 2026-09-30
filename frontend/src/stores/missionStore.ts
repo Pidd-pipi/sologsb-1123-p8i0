@@ -15,6 +15,8 @@ interface MissionState {
   addPreset: (draft: Omit<CameraPreset, 'id'>) => Promise<CameraPreset>;
   removePreset: (id: string) => Promise<void>;
   remove: (id: string) => Promise<void>;
+  /** 归档；若存在未解决冲突或待重算成果则拒绝，返回原因 */
+  archiveMission: (id: string) => Promise<{ ok: boolean; blockers: string[] }>;
 }
 
 export const useMissionStore = create<MissionState>((set, get) => ({
@@ -63,5 +65,12 @@ export const useMissionStore = create<MissionState>((set, get) => ({
   async remove(id) {
     await db.missions.delete(id);
     set({ items: get().items.filter((it) => it.id !== id) });
+  },
+  async archiveMission(id) {
+    const { getArchiveBlockers } = await import('../utils/collab');
+    const blockers = getArchiveBlockers(id);
+    if (blockers.length > 0) return { ok: false, blockers };
+    await get().update(id, { status: '已归档' });
+    return { ok: true, blockers: [] };
   },
 }));

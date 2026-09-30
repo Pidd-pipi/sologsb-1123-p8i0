@@ -23,6 +23,7 @@ import { useMissionStore } from '../stores/missionStore';
 import { useWaypointStore } from '../stores/waypointStore';
 import { useRouteMetrics, DEFAULT_ROUTE_PARAMS } from '../hooks/useRouteMetrics';
 import AmapRouteView from '../components/common/AmapRouteView';
+import MissionCollabBanner from '../components/collab/MissionCollabBanner';
 import { WAYPOINT_ACTIONS, parseWaypointText, type Waypoint, type WaypointAction } from '../types/waypoint';
 import { calcGsd, groundCoverage } from '../utils/geoCalc';
 
@@ -235,6 +236,8 @@ export default function WaypointTable() {
 
       {toast ? <Alert type="success" showIcon message={toast} closable onClose={() => setToast('')} /> : null}
       {error ? <Alert type="error" showIcon message={error} closable onClose={() => setError('')} /> : null}
+
+      <MissionCollabBanner missionId={id} />
 
       <Row gutter={14}>
         <Col span={10}>

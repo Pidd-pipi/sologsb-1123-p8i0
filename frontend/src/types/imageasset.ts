@@ -23,6 +23,11 @@ export interface ImageAsset {
   quality: ImageQuality;
   /** 归档目录 */
   folder: string;
+  /**
+   * 成果是否已失效待重算：航线参数（航高/重叠率等）改动后，
+   * 相关成果的 GSD / 重叠度不再反映当前航线，标记为 true，重算后清除。
+   */
+  stale?: boolean;
 }
 
 export type ImageAssetDraft = Omit<ImageAsset, 'id'>;
