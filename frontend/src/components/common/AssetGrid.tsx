@@ -76,7 +76,10 @@ export default function AssetGrid({
                   <Checkbox checked={selected} onChange={() => onToggle(asset.id)} />
                 </div>
                 <div style={{ position: 'absolute', top: 4, right: 4 }}>
-                  <Tag color={QUALITY_COLOR[asset.quality]}>{asset.quality}</Tag>
+                  <Space size={4}>
+                    {asset.stale ? <Tag color="volcano">失效重算</Tag> : null}
+                    <Tag color={QUALITY_COLOR[asset.quality]}>{asset.quality}</Tag>
+                  </Space>
                 </div>
               </div>
               <Typography.Text strong style={{ display: 'block', marginTop: 6 }}>
@@ -85,6 +88,11 @@ export default function AssetGrid({
               <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
                 GSD {asset.gsd} cm/px · 重叠 {asset.overlap}% · 倾角 {asset.tiltAngle}°
               </Typography.Text>
+              {asset.stale ? (
+                <Typography.Text type="warning" style={{ fontSize: 12, display: 'block' }}>
+                  航线参数已改动，该成果正在按新参数重算…
+                </Typography.Text>
+              ) : null}
               <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
                 航高 {asset.altitude} m · {new Date(asset.shotAt).toLocaleString('zh-CN')}
               </Typography.Text>

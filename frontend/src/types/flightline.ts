@@ -23,6 +23,8 @@ export interface FlightLine {
   /** 航带方向 ° */
   heading: number;
   updatedAt: number;
+  /** 多标签合并用版本号：每次对象被写回 +1 */
+  rev: number;
 }
 
-export type FlightLineDraft = Omit<FlightLine, 'id' | 'updatedAt'>;
+export type FlightLineDraft = Omit<FlightLine, 'id' | 'updatedAt' | 'rev'>;

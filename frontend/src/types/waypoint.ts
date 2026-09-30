@@ -21,9 +21,11 @@ export interface Waypoint {
   action: WaypointAction;
   /** 悬停秒数 */
   hoverSec: number;
+  /** 多标签合并用版本号：每次对象被写回 +1 */
+  rev: number;
 }
 
-export type WaypointDraft = Omit<Waypoint, 'id'>;
+export type WaypointDraft = Omit<Waypoint, 'id' | 'rev'>;
 
 /** 解析粘贴导入文本：每行 "经度,纬度[,航高]" 或 "纬度 经度" 自动判别 */
 export function parseWaypointText(text: string): { lng: number; lat: number; altitude?: number }[] {

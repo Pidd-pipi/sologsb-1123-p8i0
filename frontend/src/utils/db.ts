@@ -3,10 +3,11 @@ import type { CameraPreset, Mission } from '../types/mission';
 import type { Waypoint } from '../types/waypoint';
 import type { FlightLine } from '../types/flightline';
 import { makeThumbDataUrl, type AssetThumb, type ImageAsset } from '../types/imageasset';
+import type { MergeConflict, MergeKind } from '../types/merge';
 import { newId } from './id';
 
 export const DB_NAME = 'gbdronemap';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 export const LS_VERSION_KEY = 'gbdronemap:db-version';
 
 class DroneMapDB extends Dexie {
@@ -16,6 +17,7 @@ class DroneMapDB extends Dexie {
   assets!: Table<ImageAsset, string>;
   thumbs!: Table<AssetThumb, string>;
   presets!: Table<CameraPreset, string>;
+  conflicts!: Table<MergeConflict, string>;
 
   constructor() {
     super(DB_NAME);
@@ -53,6 +55,40 @@ class DroneMapDB extends Dexie {
           .modify((row: any) => {
             if (row.updatedAt === undefined) row.updatedAt = Date.now();
             if (row.batteryCount === undefined) row.batteryCount = 1;
+          });
+      });
+    // v3：航点 / 航线 / 成果对象引入多标签合并版本号 rev，成果增加失效标记，
+    // 并新增合并差异（冲突）台账表 conflicts。
+    this.version(3)
+      .stores({
+        missions: 'id, missionNo, areaName, droneModel, flightDate, status, purpose, createdAt',
+        waypoints: 'id, missionId, seq, action, altitude, rev',
+        lines: 'id, missionId, lineNo, updatedAt, rev',
+        assets: 'id, missionId, imageNo, quality, shotAt, rev, stale, lineRev',
+        thumbs: 'id, missionId',
+        presets: 'id, name, cameraModel',
+        conflicts: 'id, missionId, kind, objectId, field, createdAt',
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table('waypoints')
+          .toCollection()
+          .modify((row: any) => {
+            if (row.rev === undefined) row.rev = 1;
+          });
+        await tx
+          .table('lines')
+          .toCollection()
+          .modify((row: any) => {
+            if (row.rev === undefined) row.rev = 1;
+          });
+        await tx
+          .table('assets')
+          .toCollection()
+          .modify((row: any) => {
+            if (row.rev === undefined) row.rev = 1;
+            if (row.stale === undefined) row.stale = false;
+            if (row.lineRev === undefined) row.lineRev = 0;
           });
       });
   }
@@ -99,6 +135,13 @@ export function splitSorties(line: FlightLine): { sortie: number; photos: number
     photos: photosPer,
     durationMin: durationPer,
   }));
+}
+
+/** 删除某对象在合并差异台账中的全部待决条目（对象被删除或字段被选定写回时调用） */
+export async function deleteConflictsByObject(kind: MergeKind, objectId: string): Promise<void> {
+  const rows = await db.conflicts.where('objectId').equals(objectId).toArray();
+  const ids = rows.filter((r) => r.kind === kind).map((r) => r.id);
+  if (ids.length > 0) await db.conflicts.bulkDelete(ids);
 }
 
 /** 首次进入灌入示范任务、航点、航线参数与成果影像条目 */
@@ -184,6 +227,7 @@ export async function ensureSeedData(): Promise<void> {
       gimbalPitch: -90,
       action: index === wpsA.length - 1 ? '悬停' : '拍照',
       hoverSec: index === wpsA.length - 1 ? 5 : 0,
+      rev: 1,
     });
   });
   waypoints.push({
@@ -198,6 +242,7 @@ export async function ensureSeedData(): Promise<void> {
     gimbalPitch: -60,
     action: '拍照',
     hoverSec: 0,
+    rev: 1,
   });
 
   const lines: FlightLine[] = [
@@ -215,6 +260,7 @@ export async function ensureSeedData(): Promise<void> {
       batteryCount: 1,
       heading: 90,
       updatedAt: now - 30 * day,
+      rev: 1,
     },
     {
       id: newId('line'),
@@ -230,6 +276,7 @@ export async function ensureSeedData(): Promise<void> {
       batteryCount: 1,
       heading: 45,
       updatedAt: now - 8 * day,
+      rev: 1,
     },
   ];
 
@@ -253,6 +300,9 @@ export async function ensureSeedData(): Promise<void> {
       shotAt: now - 30 * day + index * 12000,
       quality,
       folder: `/DM-2024-018/100MEDIA`,
+      rev: 1,
+      stale: false,
+      lineRev: 1,
     });
     thumbs.push({ id, missionId: missionA, dataUrl: makeThumbDataUrl(`IMG_${1001 + index}`, quality, lng, lat) });
   });

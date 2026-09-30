@@ -5,13 +5,17 @@ import { RocketOutlined } from '@ant-design/icons';
 import { useMissionStore } from '../stores/missionStore';
 import { useWaypointStore } from '../stores/waypointStore';
 import { useAssetStore } from '../stores/assetStore';
+import { useLineStore } from '../stores/lineStore';
+import { useConflictStore } from '../stores/conflictStore';
 import { ensureSeedData, markDbVersion, readDbVersion } from '../utils/db';
 import { hasAmapKey } from '../utils/amapLoader';
+import { useCrossTabSync } from '../hooks/useCrossTabSync';
 import MissionList from '../pages/MissionList';
 import RoutePlanner from '../pages/RoutePlanner';
 import WaypointTable from '../pages/WaypointTable';
 import AssetCatalog from '../pages/AssetCatalog';
 import CameraPreset from '../pages/CameraPreset';
+import ConflictCenter from '../components/common/ConflictCenter';
 
 const { Header, Content } = Layout;
 
@@ -21,6 +25,9 @@ function Shell() {
   const missions = useMissionStore((s) => s.items);
   const version = readDbVersion();
   const firstMissionId = missions[0]?.id;
+
+  // 挂载多标签页数据同步：收到广播或重新可见时从 IndexedDB 重拉合并版本
+  useCrossTabSync();
 
   const items = useMemo(
     () => [
@@ -60,6 +67,7 @@ function Shell() {
           style={{ flex: 1, minWidth: 0, background: 'transparent' }}
         />
         <Space size={8}>
+          <ConflictCenter />
           <Tag color={hasAmapKey() ? 'green' : 'gold'}>
             {hasAmapKey() ? '高德 JS API' : '本地 SVG 网格视图'}
           </Tag>
@@ -81,25 +89,27 @@ function Shell() {
   );
 }
 
-/** 应用路由 + 本地数据引导（IndexedDB 迁移 + 示范数据） */
+/** 应用路由 + 本地数据引导（IndexedDB 迁移 + 示范数据 + 多标签合并台账） */
 export default function AppRouter() {
   const [ready, setReady] = useState(false);
   const loadMissions = useMissionStore((s) => s.load);
   const loadWaypoints = useWaypointStore((s) => s.load);
   const loadAssets = useAssetStore((s) => s.load);
+  const loadLines = useLineStore((s) => s.load);
+  const loadConflicts = useConflictStore((s) => s.load);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       await ensureSeedData();
       markDbVersion();
-      await Promise.all([loadMissions(), loadWaypoints(), loadAssets()]);
+      await Promise.all([loadMissions(), loadWaypoints(), loadAssets(), loadLines(), loadConflicts()]);
       if (alive) setReady(true);
     })();
     return () => {
       alive = false;
     };
-  }, [loadMissions, loadWaypoints, loadAssets]);
+  }, [loadMissions, loadWaypoints, loadAssets, loadLines, loadConflicts]);
 
   if (!ready) {
     return (

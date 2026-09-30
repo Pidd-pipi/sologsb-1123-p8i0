@@ -23,9 +23,15 @@ export interface ImageAsset {
   quality: ImageQuality;
   /** 归档目录 */
   folder: string;
+  /** 多标签合并用版本号：每次对象被写回 +1 */
+  rev: number;
+  /** 航线参数 / 相机参数改动后立即置 true：成果失效，等待按新参数重算 */
+  stale: boolean;
+  /** 该条目上一次重算所依据的航线参数版本（line.rev） */
+  lineRev: number;
 }
 
-export type ImageAssetDraft = Omit<ImageAsset, 'id'>;
+export type ImageAssetDraft = Omit<ImageAsset, 'id' | 'rev' | 'stale' | 'lineRev'>;
 
 /** 缩略图（单独建表存放 dataUrl） */
 export interface AssetThumb {

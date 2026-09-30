@@ -9,6 +9,7 @@ import {
   Input,
   InputNumber,
   Modal,
+  Popconfirm,
   Row,
   Segmented,
   Select,
@@ -17,11 +18,14 @@ import {
   Tag,
   Typography,
 } from 'antd';
-import { PlusOutlined, ReloadOutlined } from '@ant-design/icons';
-import { useMissionStore } from '../stores/missionStore';
+import { PlusOutlined, ReloadOutlined, ContainerOutlined } from '@ant-design/icons';
+import { useMissionStore, ArchiveBlockedError } from '../stores/missionStore';
 import { useWaypointStore } from '../stores/waypointStore';
 import { useAssetStore } from '../stores/assetStore';
+import { useLineStore } from '../stores/lineStore';
+import { useConflictStore } from '../stores/conflictStore';
 import { useMissionFilter } from '../hooks/useMissionFilter';
+import { message } from 'antd';
 import MissionCard from '../components/common/MissionCard';
 import { MISSION_PURPOSES, MISSION_STATUSES, type LngLat, type MissionDraft, type MissionPurpose, type MissionStatus } from '../types/mission';
 
@@ -51,8 +55,11 @@ export default function MissionList() {
   const navigate = useNavigate();
   const missions = useMissionStore((s) => s.items);
   const addMission = useMissionStore((s) => s.add);
+  const archiveMission = useMissionStore((s) => s.archive);
   const waypoints = useWaypointStore((s) => s.items);
   const assets = useAssetStore((s) => s.items);
+  const lines = useLineStore((s) => s.items);
+  const openConflicts = useConflictStore((s) => s.items);
   const { filters, patch, reset, result, options } = useMissionFilter();
 
   const [open, setOpen] = useState(false);
@@ -90,6 +97,20 @@ export default function MissionList() {
     }),
     [missions, waypoints, assets],
   );
+
+  const archive = async (missionId: string) => {
+    try {
+      await archiveMission(missionId);
+      message.success('差异已清空、成果均有效，任务已归档');
+    } catch (e) {
+      if (e instanceof ArchiveBlockedError) {
+        const parts: string[] = [];
+        if (e.conflicts > 0) parts.push(`${e.conflicts} 项合并差异未选定`);
+        if (e.staleAssets > 0) parts.push(`${e.staleAssets} 张成果影像失效待重算`);
+        message.error(`还不能归档：${parts.join('，')}`);
+      }
+    }
+  };
 
   const submit = async () => {
     if (!draft.missionNo.trim()) {
@@ -218,32 +239,55 @@ export default function MissionList() {
         <Empty description="没有符合条件的任务" />
       ) : (
         <Row gutter={[12, 12]}>
-          {result.map((row) => (
-            <Col key={row.mission.id} xs={24} xl={12}>
-              <MissionCard
-                mission={row.mission}
-                waypointCount={row.waypointCount}
-                assetCount={row.assetCount}
-                lineCount={row.waypointCount > 1 ? 1 : 0}
-                footer={
-                  <Space wrap size={4}>
-                    <Button size="small" type="link" onClick={() => navigate(`/missions/${row.mission.id}/route`)}>
-                      航线规划
-                    </Button>
-                    <Button size="small" type="link" onClick={() => navigate(`/missions/${row.mission.id}/waypoints`)}>
-                      航点明细
-                    </Button>
-                    <Button size="small" type="link" onClick={() => navigate(`/missions/${row.mission.id}/assets`)}>
-                      成果编目
-                    </Button>
-                    <Button size="small" type="link" onClick={() => navigate('/settings/camera')}>
-                      相机预设
-                    </Button>
-                  </Space>
-                }
-              />
-            </Col>
-          ))}
+          {result.map((row) => {
+            const missionLines = lines.filter((l) => l.missionId === row.mission.id);
+            const estPhotos = missionLines.reduce((sum, l) => sum + l.estPhotos, 0);
+            const conflictCount = openConflicts.filter((c) => c.missionId === row.mission.id).length;
+            const staleCount = assets.filter((a) => a.missionId === row.mission.id && a.stale).length;
+            return (
+              <Col key={row.mission.id} xs={24} xl={12}>
+                <MissionCard
+                  mission={row.mission}
+                  waypointCount={row.waypointCount}
+                  assetCount={row.assetCount}
+                  lineCount={missionLines.length}
+                  footer={
+                    <Space wrap size={4}>
+                      <Button size="small" type="link" onClick={() => navigate(`/missions/${row.mission.id}/route`)}>
+                        航线规划
+                      </Button>
+                      <Button size="small" type="link" onClick={() => navigate(`/missions/${row.mission.id}/waypoints`)}>
+                        航点明细
+                      </Button>
+                      <Button size="small" type="link" onClick={() => navigate(`/missions/${row.mission.id}/assets`)}>
+                        成果编目
+                      </Button>
+                      <Button size="small" type="link" onClick={() => navigate('/settings/camera')}>
+                        相机预设
+                      </Button>
+                      <Popconfirm
+                        title="归档该任务？"
+                        description="需先清空全部合并差异并等待成果重算完成"
+                        onConfirm={() => archive(row.mission.id)}
+                      >
+                        <Button
+                          size="small"
+                          type="link"
+                          icon={<ContainerOutlined />}
+                          disabled={row.mission.status === '已归档'}
+                        >
+                          归档
+                        </Button>
+                      </Popconfirm>
+                      {estPhotos > 0 ? <Tag color="geekblue">预计 {estPhotos} 张</Tag> : null}
+                      {conflictCount > 0 ? <Tag color="volcano">{conflictCount} 项差异待选定</Tag> : null}
+                      {staleCount > 0 ? <Tag color="orange">{staleCount} 张失效重算</Tag> : null}
+                    </Space>
+                  }
+                />
+              </Col>
+            );
+          })}
         </Row>
       )}
 

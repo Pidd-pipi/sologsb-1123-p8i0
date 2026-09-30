@@ -1,16 +1,8 @@
 import { useMemo } from 'react';
 import { useMissionStore } from '../stores/missionStore';
 import { useWaypointStore } from '../stores/waypointStore';
-import {
-  calcGsd,
-  estimateBatteries,
-  estimateDuration,
-  estimatePhotos,
-  lineSpacing,
-  pathLengthMeters,
-  photoInterval,
-  polygonAreaM2,
-} from '../utils/geoCalc';
+import { groundCoverage, pathLengthMeters, polygonAreaM2 } from '../utils/geoCalc';
+import { computeLineDerived } from '../utils/lineMetrics';
 import type { LngLat } from '../types/mission';
 
 export interface RouteParams {
@@ -64,51 +56,34 @@ export function useRouteMetrics(missionId: string | undefined, params: RoutePara
 
   return useMemo<RouteMetrics>(() => {
     const mission = missions.find((m) => m.id === missionId);
-    const points: LngLat[] = allWaypoints
+    const points = allWaypoints
       .filter((w) => w.missionId === missionId)
-      .sort((a, b) => a.seq - b.seq)
-      .map((w) => [w.lng, w.lat] as LngLat);
+      .sort((a, b) => a.seq - b.seq);
+    const lngLats: LngLat[] = points.map((w) => [w.lng, w.lat] as LngLat);
 
+    const focalLength = mission?.focalLength ?? 8.8;
     const sensorWidth = mission?.sensorWidth ?? 13.2;
     const sensorHeight = mission?.sensorHeight ?? 8.8;
-    const focalLength = mission?.focalLength ?? 8.8;
-    const pixelSize = mission?.pixelSize ?? 2.4;
 
-    const gsd = calcGsd(pixelSize, params.altitude, focalLength);
-    const spacing = lineSpacing(sensorWidth, params.altitude, focalLength, params.overlapSide);
-    const interval = photoInterval(sensorHeight, params.altitude, focalLength, params.overlapForward);
+    const derived = computeLineDerived(mission, points, params);
     const area = mission ? polygonAreaM2(mission.areaPolygon) : 0;
-    const pathLength = pathLengthMeters(points);
-    // 按测区面积与航线间距估算航带数
+    const pathLength = pathLengthMeters(lngLats);
     const side = area > 0 ? Math.sqrt(area) : 0;
-    const lineCount = spacing > 0 && side > 0 ? Math.max(1, Math.ceil(side / spacing)) : 0;
-    const effLineLength = lineCount > 0 ? (area > 0 ? area / (lineCount * Math.max(spacing, 1)) * spacing : 0) : 0;
-    const estPhotos = estimatePhotos(effLineLength || side, interval, lineCount);
-    const hoverSecTotal = allWaypoints
-      .filter((w) => w.missionId === missionId)
-      .reduce((s, w) => s + (w.action === '悬停' ? w.hoverSec : 0), 0);
-    const estDuration = estimateDuration(pathLength, params.speed, points.length, hoverSecTotal);
-    const batteryCount = estimateBatteries(estDuration);
-    const perSortie = 20;
-    const sortieCount = Math.max(1, Math.ceil(estDuration / perSortie));
+    const lineCount = derived.spacing > 0 && side > 0 ? Math.max(1, Math.ceil(side / derived.spacing)) : 0;
+    const sortieCount = Math.max(1, Math.ceil(derived.estDuration / 20));
 
     return {
-      gsd,
-      spacing,
-      photoInterval: interval,
-      estPhotos,
-      estDuration,
-      batteryCount,
+      ...derived,
       area,
       pathLength,
       waypointCount: points.length,
       lineCount,
-      coverageForward: Math.round((sensorHeight * params.altitude) / (focalLength || 1) * 100) / 100,
-      coverageSide: Math.round((sensorWidth * params.altitude) / (focalLength || 1) * 100) / 100,
+      coverageForward: Math.round(groundCoverage(sensorHeight, params.altitude, focalLength) * 100) / 100,
+      coverageSide: Math.round(groundCoverage(sensorWidth, params.altitude, focalLength) * 100) / 100,
       sorties: Array.from({ length: sortieCount }, (_, i) => ({
         sortie: i + 1,
-        photos: Math.ceil(estPhotos / sortieCount),
-        durationMin: Math.round((estDuration / sortieCount) * 10) / 10,
+        photos: Math.ceil(derived.estPhotos / sortieCount),
+        durationMin: Math.round((derived.estDuration / sortieCount) * 10) / 10,
       })),
     };
   }, [missions, allWaypoints, missionId, params]);

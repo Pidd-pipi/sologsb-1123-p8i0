@@ -9,6 +9,7 @@ import {
   Empty,
   Input,
   InputNumber,
+  message,
   Row,
   Select,
   Space,
@@ -23,6 +24,7 @@ import { useMissionStore } from '../stores/missionStore';
 import { useWaypointStore } from '../stores/waypointStore';
 import { useRouteMetrics, DEFAULT_ROUTE_PARAMS } from '../hooks/useRouteMetrics';
 import AmapRouteView from '../components/common/AmapRouteView';
+import MergeConflictsCard from '../components/common/MergeConflictsCard';
 import { WAYPOINT_ACTIONS, parseWaypointText, type Waypoint, type WaypointAction } from '../types/waypoint';
 import { calcGsd, groundCoverage } from '../utils/geoCalc';
 
@@ -88,10 +90,21 @@ export default function WaypointTable() {
   };
 
   const applyBatchAltitude = async () => {
+    let pending = 0;
     for (const w of rows) {
-      await update(w.id, { altitude: batchAltitude });
+      // eslint-disable-next-line no-await-in-loop
+      const conflicts = await update(w.id, { altitude: batchAltitude });
+      pending += conflicts.length;
     }
-    setToast(`已把 ${rows.length} 个航点的高度统一改为 ${batchAltitude} m`);
+    setToast(`已把 ${rows.length} 个航点的高度统一改为 ${batchAltitude} m${pending ? `，另有 ${pending} 项与他页冲突待选定` : ''}`);
+  };
+
+  /** 行内编辑：三方合并后若有冲突字段，提示到下方差异清单选定 */
+  const patchRow = async (row: Waypoint, patch: Partial<Waypoint>) => {
+    const conflicts = await update(row.id, patch);
+    if (conflicts.length > 0) {
+      message.warning(`航点 #${row.seq} 有 ${conflicts.length} 项与他页底本不同，已挂起待选定`);
+    }
   };
 
   const columns: Columns = [
@@ -102,28 +115,28 @@ export default function WaypointTable() {
       title: '相对航高 m',
       width: 140,
       render: (_: unknown, row: Waypoint) => (
-        <InputNumber size="small" min={20} max={600} value={row.altitude} onChange={(v) => update(row.id, { altitude: Number(v ?? 0) })} />
+        <InputNumber size="small" min={20} max={600} value={row.altitude} onChange={(v) => patchRow(row, { altitude: Number(v ?? 0) })} />
       ),
     },
     {
       title: '航速 m/s',
       width: 120,
       render: (_: unknown, row: Waypoint) => (
-        <InputNumber size="small" min={1} max={25} step={0.5} value={row.speed} onChange={(v) => update(row.id, { speed: Number(v ?? 0) })} />
+        <InputNumber size="small" min={1} max={25} step={0.5} value={row.speed} onChange={(v) => patchRow(row, { speed: Number(v ?? 0) })} />
       ),
     },
     {
       title: '航向 °',
       width: 120,
       render: (_: unknown, row: Waypoint) => (
-        <InputNumber size="small" min={0} max={360} value={row.heading} onChange={(v) => update(row.id, { heading: Number(v ?? 0) })} />
+        <InputNumber size="small" min={0} max={360} value={row.heading} onChange={(v) => patchRow(row, { heading: Number(v ?? 0) })} />
       ),
     },
     {
       title: '云台俯仰 °',
       width: 130,
       render: (_: unknown, row: Waypoint) => (
-        <InputNumber size="small" min={-90} max={30} value={row.gimbalPitch} onChange={(v) => update(row.id, { gimbalPitch: Number(v ?? 0) })} />
+        <InputNumber size="small" min={-90} max={30} value={row.gimbalPitch} onChange={(v) => patchRow(row, { gimbalPitch: Number(v ?? 0) })} />
       ),
     },
     {
@@ -134,7 +147,7 @@ export default function WaypointTable() {
           size="small"
           style={{ width: 100 }}
           value={row.action}
-          onChange={(v) => update(row.id, { action: v as WaypointAction })}
+          onChange={(v) => patchRow(row, { action: v as WaypointAction })}
           options={WAYPOINT_ACTIONS.map((a) => ({ value: a, label: a }))}
         />
       ),
@@ -143,7 +156,7 @@ export default function WaypointTable() {
       title: '悬停 s',
       width: 110,
       render: (_: unknown, row: Waypoint) => (
-        <InputNumber size="small" min={0} max={300} value={row.hoverSec} onChange={(v) => update(row.id, { hoverSec: Number(v ?? 0) })} />
+        <InputNumber size="small" min={0} max={300} value={row.hoverSec} onChange={(v) => patchRow(row, { hoverSec: Number(v ?? 0) })} />
       ),
     },
     {
@@ -235,6 +248,8 @@ export default function WaypointTable() {
 
       {toast ? <Alert type="success" showIcon message={toast} closable onClose={() => setToast('')} /> : null}
       {error ? <Alert type="error" showIcon message={error} closable onClose={() => setError('')} /> : null}
+
+      <MergeConflictsCard missionId={id} title="航点的合并差异" />
 
       <Row gutter={14}>
         <Col span={10}>

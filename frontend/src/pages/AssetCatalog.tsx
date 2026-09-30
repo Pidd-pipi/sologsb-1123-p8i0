@@ -19,6 +19,7 @@ import { useWaypointStore } from '../stores/waypointStore';
 import { useAssetStore } from '../stores/assetStore';
 import AssetGrid from '../components/common/AssetGrid';
 import AmapRouteView from '../components/common/AmapRouteView';
+import MergeConflictsCard from '../components/common/MergeConflictsCard';
 import { IMAGE_QUALITIES, type ImageAsset, type ImageAssetDraft, type ImageQuality } from '../types/imageasset';
 import { calcGsd, distanceMeters } from '../utils/geoCalc';
 
@@ -38,6 +39,7 @@ export default function AssetCatalog() {
     () => assets.filter((a) => a.missionId === id).sort((a, b) => a.imageNo.localeCompare(b.imageNo, 'zh-Hans-CN', { numeric: true })),
     [assets, id],
   );
+  const staleCount = useMemo(() => missionAssets.filter((a) => a.stale).length, [missionAssets]);
   const missionWaypoints = useMemo(
     () => waypoints.filter((w) => w.missionId === id).sort((a, b) => a.seq - b.seq),
     [waypoints, id],
@@ -156,17 +158,31 @@ export default function AssetCatalog() {
       {toast ? <Alert type="success" showIcon message={toast} closable onClose={() => setToast('')} /> : null}
       {error ? <Alert type="error" showIcon message={error} closable onClose={() => setError('')} /> : null}
 
+      <MergeConflictsCard missionId={id} title="成果影像的合并差异" />
+      {staleCount > 0 ? (
+        <Alert
+          type="warning"
+          showIcon
+          message={`航线参数已改动，${staleCount} 张成果影像已失效，正在按最新航线与航点重算 GSD / 重叠度 / 航高；重算完成前不能归档。`}
+        />
+      ) : null}
+
       <Row gutter={12}>
         {stats.map((s) => (
-          <Col span={6} key={s.quality}>
+          <Col span={4} key={s.quality}>
             <Card size="small">
               <Statistic title={`${s.quality}影像`} value={s.count} suffix="张" />
             </Card>
           </Col>
         ))}
-        <Col span={6}>
+        <Col span={4}>
           <Card size="small">
             <Statistic title="航点数量" value={missionWaypoints.length} suffix="个" />
+          </Card>
+        </Col>
+        <Col span={4}>
+          <Card size="small">
+            <Statistic title="失效待重算" value={staleCount} suffix="张" valueStyle={{ color: staleCount > 0 ? '#cf1322' : undefined }} />
           </Card>
         </Col>
       </Row>
